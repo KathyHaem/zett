@@ -1,3 +1,5 @@
+from typing import Union, List
+
 import numpy as np
 from itertools import chain
 from flax import linen as nn
@@ -609,48 +611,73 @@ CHARS_TO_BYTES = {
 BYTES_TO_CHARS = {v: k for k, v in CHARS_TO_BYTES.items()}
 
 
-def get_sample_indices(n, p, batch_size, min_k, n_samples):
+def get_sample_indices(n: int, p: np.array, batch_size, min_k, n_samples):
+    """ n should be number of tokens in the vocabulary
+    p is an array (n,) --- probably always filled with 0.0s. Otherwise I GUESS it's scores from a unigram model...
+    in which case it would mean that frequent tokens get predicted multiple times?
+    batch_size is target batch size
+    min_k default value is 10
+    n_samples default value is 100 (why?)
+    """
+    # this just makes sure that if there was a pseudo-minus-infinity, it's set to the actual numpy one.
     p = np.where(p > NEGATIVE_INF_FILL_VALUE, p, -np.inf)
+    # exponential but i'm not sure why. I guess it changes all the zeros to ones, and any scores we already knew would
+    # be bigger than one after.. though why it's done in here who knows
     p = np.exp(p)
 
+    # i.e., 100 by 8k or something
     indices = np.empty((n_samples, batch_size), dtype=np.int32)
 
-    random_offset = 0
+    random_offset = 0  # what is this for?
     random_indices = np.arange(n)
-    np.random.shuffle(random_indices)
+    np.random.shuffle(random_indices)  # shuffled list of all vocab indices
 
     n_samples_per_k = n_samples // min_k
-    assert n_samples_per_k * min_k == n_samples
+    assert n_samples_per_k * min_k == n_samples  # so, 10, and it has to be an integer ratio
 
     for i in range(n_samples):
         if (i + 1) % n_samples_per_k == 0:
+            # every ten steps, this would do the rest of the vocab
             num_random = len(random_indices) - random_offset
         else:
+            # will be ca. 25k
             num_random = len(random_indices) // n_samples_per_k
-
+        # ah, so ig it threw because it's not set to do more than 10 batches??
+        # what would even happen if it's *less* than ten batches?  .. oh wait it won't be bc ofc we're dividing by 10
+        # this just fills indices with stuff from the shuffled array...couldn't that have been a damn reshape??
+        # also how does this actually behave if vocab by 10 is < batch size? (the batch gets filled up with random idxs)
         indices[i, :num_random] = random_indices[
             random_offset : random_offset + num_random
         ]
 
         if (i + 1) % n_samples_per_k == 0:
+            # then every ten steps reset random offset and re-shuffle the indices ... again, why?
             random_offset = 0
             np.random.shuffle(random_indices)
         else:
+            # set random offset to the end of the last batch
             random_offset += num_random
 
+        # every iteration, put in some random indices to fill up the batch
         sample_p = p.copy()
-        sample_p[indices[i, :num_random]] = 0
-        sample_p /= sample_p.sum()
+        sample_p[indices[i, :num_random]] = 0  # don't sample the ones already in the batch
+        sample_p /= sample_p.sum()  # normalize
         indices[i, num_random:] = np.random.choice(
             n, size=batch_size - num_random, p=sample_p, replace=False
-        )
+        )  # fill up the end of the batch
 
+    # the other thing is that I'm not sure this batching behaviour will *at all* reduce the CPU RAM needed
     return indices
 
 
 def get_surface_form_matrix(
-    tokenizer_or_tokens, maxlen, tokenizer_to_use=None, padding=0, verbose=False
+    tokenizer_or_tokens: Union[List, PreTrainedTokenizerFast], maxlen, tokenizer_to_use=None, padding=0, verbose=False
 ):
+    """ Returns a numpy matrix of size (vocab_size + padding, maxlen).
+    Also returns how many tokens were truncated to maxlen after conversion to bytes
+    maxlen is more on the order of 15---it's how long a single token is allowed to be
+    padding stays 0 in all existing calls.
+    """
     # tokens are expected to be byte encoded
     if isinstance(tokenizer_or_tokens, list):
         tokens = tokenizer_or_tokens
@@ -668,16 +695,19 @@ def get_surface_form_matrix(
     n_truncated = 0
 
     for i, token in tqdm(enumerate(tokens), total=vocab_size, disable=not verbose):
+        # special tokens are copied from the "tokenizer to use"
+        # shouldn't this even fail if tokenizer_to_use is None? (but I guess that's not the case in the actual calls)
         if token in tokenizer_to_use.all_special_tokens:
             surface_form_matrix[i, 0] = tokenizer_to_use.convert_tokens_to_ids(token)
             continue
-
+        # very manual conversion to bytes
         token_bytes = bytes([CHARS_TO_BYTES[c] for c in token])
 
         if isinstance(tokenizer_to_use, ByT5Tokenizer):
             ids = tokenizer_to_use.convert_tokens_to_ids([chr(i) for i in token_bytes])
         else:
             # assume hn tokenizer uses byte pretokenization
+            # hypernetwork tokenizer?
             ids = [x.id for x in tokenizer_to_use._tokenizer.model.tokenize(token)]
 
         if len(ids) > maxlen:

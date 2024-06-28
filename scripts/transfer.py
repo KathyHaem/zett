@@ -1,9 +1,14 @@
 import math
 from dataclasses import dataclass
+
+import torch
+import wandb
+from datasets import Dataset
 from flax import serialization, traverse_util
 import jax
 import jax.numpy as jnp
 import numpy as np
+from torch.utils.data import DataLoader
 from transformers import HfArgumentParser, AutoTokenizer, AutoConfig
 import os
 import transformers
@@ -25,6 +30,17 @@ from zett.model import (
     BIAS_PATHS,
 )
 from zett.tokenizer_converters import convert_to_byte_level
+
+# start a new wandb run to track this script
+wandb.init(
+    # set the wandb project where this run will be logged
+    project="zett-testing",
+    # set the name of the run
+    name="transfer test",
+)
+
+
+# os.environ["WANDB_MODE"] = "dryrun"
 
 
 @dataclass
@@ -49,6 +65,7 @@ class Args:
     lang_code: str = None
     make_whitespace_consistent: bool = True
     save_pt: bool = False
+    save_flax: bool = True
 
 
 def batched_inference(target_surface_form_matrix, target_priors, config, args):
@@ -87,8 +104,8 @@ def batched_inference(target_surface_form_matrix, target_priors, config, args):
             predicted_embeddings_out_batch,
             predicted_bias_batch,
         ) = predict(
-                    jax.device_put(target_surface_form_matrix[batch_indices], SHARDING.reshape((-1, 1)), ),
-                    jax.device_put(target_priors[batch_indices], SHARDING.reshape((-1,))),
+            jax.device_put(target_surface_form_matrix[batch_indices], SHARDING.reshape((-1, 1)), ),
+            jax.device_put(target_priors[batch_indices], SHARDING.reshape((-1,))),
         )
 
         if last_batch and empty_in_last_batch > 0:
@@ -140,6 +157,10 @@ if __name__ == "__main__":
 
         lang_index = jnp.array(langs.index(args.lang_code), dtype=jnp.int32)
     else:
+        if config.hn_embed_lang_id:
+            raise ValueError("Model requires lang_code to be set.")
+            # OR: can I somehow average the predictions over different language codes ... maybe even just average the
+            # lang embedding it's using??
         lang_index = None
 
     hypernet = Hypernet(config, dtype=getattr(jnp, args.dtype))
@@ -207,6 +228,7 @@ if __name__ == "__main__":
 
     print(f"Truncated {n_truncated} tokens.")
 
+    # not sure when this function *is* available, but in my test runs it always threw the warning
     if hasattr(tokenizer._tokenizer.model, "get_scores"):
         target_priors = tokenizer._tokenizer.model.get_scores()
     else:
@@ -214,9 +236,10 @@ if __name__ == "__main__":
         target_priors = [0.0] * len(tokenizer)
 
     target_priors += [0.0] * (
-        len(tokenizer) - len(target_priors)
+            len(tokenizer) - len(target_priors)
     )  # for added special tokens
     target_priors = np.array(target_priors)
+
 
     @jax.jit
     def predict(target_surface_form_matrix, target_priors):
@@ -232,6 +255,7 @@ if __name__ == "__main__":
             lang_index=lang_index,
         )
         return predicted_embeddings_in, predicted_embeddings_out, predicted_bias
+
 
     original_length = len(target_surface_form_matrix)
 
@@ -311,8 +335,14 @@ if __name__ == "__main__":
     downstream_model.save_pretrained(
         args.output,
         params=traverse_util.unflatten_dict(flat_downstream_params),
-        max_shard_size="20GB",  # needed for 7B PT conversion https://github.com/huggingface/transformers/issues/20248
+        max_shard_size="30GB",
+        # needed for 7B PT conversion https://github.com/huggingface/transformers/issues/20248
     )
+
+    # trying to see if "safe serialisation" == pytorch format lol
+    # if args.save_pt:
+    #     downstream_model.save_pretrained(args.output, params=traverse_util.unflatten_dict(flat_downstream_params),
+    #                                      safe_serialization=True)
 
     del downstream_model
     del flat_downstream_params
@@ -323,6 +353,10 @@ if __name__ == "__main__":
 
     if args.save_pt:
         pt_model = getattr(transformers, args.model_class).from_pretrained(
-            args.output, from_flax=True
+            args.output, from_flax=True, torch_dtype=torch.bfloat16
         )
         pt_model.save_pretrained(args.output)
+
+    if not args.save_flax:
+        os.remove(os.path.join(args.output, "flax_model.msgpack"))
+
