@@ -1,5 +1,6 @@
 import math
 from dataclasses import dataclass
+from typing import List
 
 import torch
 import wandb
@@ -66,6 +67,7 @@ class Args:
     make_whitespace_consistent: bool = True
     save_pt: bool = False
     save_flax: bool = True
+    bilingual: bool = False
 
 
 def batched_inference(target_surface_form_matrix, target_priors, config, args):
@@ -152,10 +154,13 @@ if __name__ == "__main__":
             langs = config.langs
         else:
             assert args.lang_path is not None
-
             langs = [x.strip() for x in open(args.lang_path).readlines()]
 
-        lang_index = jnp.array(langs.index(args.lang_code), dtype=jnp.int32)
+        if args.bilingual:
+            lang_codes = args.lang_code.split("-")
+        else:
+            lang_codes = [args.lang_code]
+        lang_index = jnp.array([langs.index(code) for code in lang_codes], dtype=jnp.int32)
     else:
         if config.hn_embed_lang_id:
             raise ValueError("Model requires lang_code to be set.")

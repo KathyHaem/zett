@@ -25,9 +25,11 @@ from zett.utils import BYTES_TO_CHARS
 class Args:
     output: str = "/mnt/disks/persist/tokenizers_spm/cpp"
     dataset_path: str = "/mnt/disks/persist/valid/cpp"
+    langs: str = None
     vocab_size: int = 50000
     max_length: int = 16
     for_code: bool = True
+    bilingual: bool = True
 
 
 if __name__ == "__main__":
@@ -35,11 +37,24 @@ if __name__ == "__main__":
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
 
-    dataset_path = args.dataset_path + ".txt"
+    if not args.langs:  # i.e., previous behaviour
+        dataset_path = args.dataset_path + ".txt"
 
-    if not os.path.exists(dataset_path):
-        dset = load_from_disk(args.dataset_path)
-        open(dataset_path, "w").write("\n".join(dset["text"]))
+        if not os.path.exists(dataset_path):
+            dset = load_from_disk(args.dataset_path)
+            open(dataset_path, "a+").write("\n".join(dset["text"]))
+
+    else:
+        langs = [args.langs]
+        if args.bilingual:
+            langs = args.langs.split("-")
+
+        dataset_path = args.dataset_path + args.langs + ".txt"
+
+        if not os.path.exists(dataset_path):
+            for lang in langs:
+                dset = load_from_disk(os.path.join(args.dataset_path, lang) + ".parquet")
+                open(dataset_path, "a+").write("\n".join(dset["text"]))
 
     spm_path = str(output / "spm.model")
     spm.SentencePieceTrainer.train(

@@ -190,7 +190,7 @@ class ZettHypernet(PreTrainedModel):
         attention_mask = target_surface_forms != self.pad_token_id
 
         if self.config.hn_embed_lang_id:
-            lang_embedding = self.lang_embeddings(lang_index).squeeze()
+            lang_embedding = self.lang_embeddings(lang_index).mean().squeeze()
             # position embed and type embed are added afterwards only in PT version so we need to subtract them here
             lang_embedding -= self.model.embeddings.token_type_embeddings(
                 torch.tensor(0, device=self.device)
