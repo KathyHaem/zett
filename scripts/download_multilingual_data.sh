@@ -17,13 +17,13 @@ else
     languages=$1
 fi
 
-mkdir -p /mnt/disks/persist/train/
-mkdir -p /mnt/disks/persist/valid/
-mkdir -p /mnt/disks/persist/large_tokenizers/
+mkdir -p ../persist/train/
+mkdir -p ../persist/valid/
+mkdir -p ../persist/large_tokenizers/
 
 for lang in $languages
 do
-    gsutil -m cp gs://trc-transfer-data/hypertoken/datasets/multilingual/train/$lang.parquet /mnt/disks/persist/train/
-    gsutil -m cp gs://trc-transfer-data/hypertoken/datasets/multilingual/valid/$lang.parquet /mnt/disks/persist/valid/
-    gsutil -m cp -r gs://trc-transfer-data/hypertoken/datasets/multilingual/large_tokenizers/$lang /mnt/disks/persist/large_tokenizers/
+    gsutil -m cp gs://trc-transfer-data/hypertoken/datasets/multilingual/train/$lang.parquet ../persist/train/
+    gsutil -m cp gs://trc-transfer-data/hypertoken/datasets/multilingual/valid/$lang.parquet ../persist/valid/
+    gsutil -m cp -r gs://trc-transfer-data/hypertoken/datasets/multilingual/large_tokenizers/$lang ../persist/large_tokenizers/
 done

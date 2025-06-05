@@ -77,7 +77,8 @@ class FlaxHyperRobertaEmbeddings(FlaxRobertaEmbeddings):
             )
 
         if self.config.embed_lang_id:
-            lang_embeddings = jnp.squeeze(self.lang_embedding(lang_index))
+            print(lang_index)
+            lang_embeddings = jnp.squeeze(self.lang_embedding(lang_index).mean(axis=0))
             hidden_states = jnp.concatenate(
                 [
                     hidden_states,

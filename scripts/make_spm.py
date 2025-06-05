@@ -8,7 +8,7 @@ from tokenizers import (
 )
 from transformers import HfArgumentParser
 from dataclasses import dataclass
-from datasets import load_from_disk
+from datasets import load_dataset
 from pathlib import Path
 from transformers import PreTrainedTokenizerFast
 import os
@@ -53,7 +53,7 @@ if __name__ == "__main__":
 
         if not os.path.exists(dataset_path):
             for lang in langs:
-                dset = load_from_disk(os.path.join(args.dataset_path, lang) + ".parquet")
+                dset = load_dataset("parquet", data_files={'train': os.path.join(args.dataset_path, lang) + ".parquet"})["train"]
                 open(dataset_path, "a+").write("\n".join(dset["text"]))
 
     spm_path = str(output / "spm.model")

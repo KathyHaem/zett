@@ -2,14 +2,14 @@
 
 set -x
 
-LANGS=("cs" "uk" "ja" "he")
+#LANGS=("cs" "uk" "ja" "he")
 
-for LANG in "${LANGS[@]}"; do
-  python3 data/prepare.py --include_langs="${LANG}"
+#for LANG in "${LANGS[@]}"; do
+#  python3 data/prepare.py --include_langs="${LANG}"
   # bash scripts/make_tokenizers.sh "${LANG}"
-done
+#done
 
-LANG_PAIRS=("cs-uk" "en-cs" "uk-en" "en-ja" "he-en")
+LANG_PAIRS=("ru-en")
 
 for PAIR in "${LANG_PAIRS[@]}"; do
 

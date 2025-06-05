@@ -17,7 +17,7 @@ else
     languages=$1
 fi
 
-mkdir -p /mnt/disks/persist/tokenizers/
+mkdir -p ../persist/tokenizers/
 
 for lang in $languages
 do
@@ -28,6 +28,6 @@ do
     else
         EXTRA_ARGS=""
     fi
-    python3 scripts/make_spm.py --dataset /mnt/disks/persist/train/$lang.parquet --output /mnt/disks/persist/tokenizers/$lang $EXTRA_ARGS
-    rm -r ~/.cache
+    python3 scripts/make_spm.py --dataset ../persist/train/$lang.parquet --output ../persist/tokenizers/$lang $EXTRA_ARGS
+    # rm -r ~/.cache
 done
